@@ -1,7 +1,7 @@
 {
   "name": "hfro",
-  "version": "2.0.0",
-  "description": "Two read-only reviewers for Claude Code: a plan-advisor that checks larger or riskier plans before work starts, and an advisor that must approve every non-trivial result before it reaches the user (enforced by hooks). Falls back to another model when Fable hits its limit.",
+  "version": "2.1.0",
+  "description": "Two read-only reviewers: a plan-advisor for larger or riskier plans and an advisor that must approve every change before it reaches you, enforced by hooks. Falls back to another model when Fable hits its limit.",
   "author": {
     "name": "hfrotan"
   },
