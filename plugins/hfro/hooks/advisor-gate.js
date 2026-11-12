@@ -271,18 +271,35 @@ function modeStop(input) {
       for (const p of content) {
         if (!p || p.type !== 'tool_result' || !p.tool_use_id) continue;
         const text = textOf(p.content);
-        results[p.tool_use_id] = { text, async: tur.isAsync === true || tur.status === 'async_launched' || ASYNC_RE.test(text) };
+        const async = tur.isAsync === true || tur.status === 'async_launched' || ASYNC_RE.test(text);
+        results[p.tool_use_id] = { text, async, agentId: typeof tur.agentId === 'string' ? tur.agentId : '', at: i };
       }
     }
   }
 
-  // A round is a call that returned a verdict (or whose result is not written yet).
+  // A background review reports back later in a notice naming its agent id. Until then it is
+  // still running (and counts as a round); a notice without a verdict means it failed.
+  for (const r of Object.values(results)) {
+    if (!r.async) continue;
+    let notice = '';
+    for (let j = r.at + 1; j < entries.length; j++) {
+      const e = entries[j];
+      if (!e || e.isSidechain || e.type === 'assistant' || e.type === 'progress') continue;
+      const raw = JSON.stringify(e);
+      if (r.agentId ? !raw.includes(r.agentId) : !VERDICT_RE.test(raw)) continue;
+      notice = raw.replace(/\\n/g, ' ');
+      if (VERDICT_RE.test(raw)) break;
+    }
+    if (notice) Object.assign(r, { async: false, text: notice });
+  }
+
+  // A round is a call that returned a verdict, is still running, or whose result is not written yet.
   const verdictOf = (c) => {
     const r = results[c.id];
     const m = r && !r.async && VERDICT_RE.exec(r.text);
     return m ? m[1].toUpperCase() : null;
   };
-  const isRound = (c) => !results[c.id] || verdictOf(c) !== null;
+  const isRound = (c) => !results[c.id] || results[c.id].async || verdictOf(c) !== null;
   const rounds = calls.filter(isRound);
   const lastRound = rounds[rounds.length - 1];
   const lastCall = calls[calls.length - 1];
@@ -291,8 +308,9 @@ function modeStop(input) {
   const now = fingerprint(input, watchedDir(input, state));
   const treeChanged = now !== null && typeof state.baseline === 'string' && state.baseline !== now;
   if ((lastEdit < 0 && !treeChanged) || rounds.length >= MAX_ROUNDS) allow();
-  const lastMsg = lastLine(typeof input.last_assistant_message === 'string' ? input.last_assistant_message : lastText);
-  if (PAUSED_RE.test(lastMsg) || (failed && NOT_RUN_RE.test(lastMsg))) allow();
+  const fullMsg = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : lastText;
+  const lastMsg = lastLine(fullMsg);
+  if ((PAUSED_RE.test(lastMsg) && fullMsg.includes('?')) || (failed && NOT_RUN_RE.test(lastMsg))) allow();
 
   const reviewedTree = lastRound && state.reviews ? state.reviews[String(lastRound.id)] : undefined;
   const upToDate = lastRound && lastRound.i > lastEdit && (now === null || typeof reviewedTree !== 'string' || reviewedTree === now);
@@ -303,18 +321,14 @@ function modeStop(input) {
   let callAgain = true;
   if (failed) {
     const r = results[failed.id];
-    if (r.async) {
-      note = 'The advisor ran in the background, so its verdict is missing. Call it again with run_in_background: false. ';
+    note = `The last advisor call gave no verdict ("${r.text.replace(/\s+/g, ' ').trim().slice(0, 160)}"). `;
+    if (!LIMIT_RE.test(r.text)) {
+      note += 'Call it again. ';
+    } else if (fb.model === 'off' || failed.model === fb.model) {
+      note += `${fb.model === 'off' ? 'The fallback is off' : 'The fallback failed too'}: tell the user and end with "Review not run: model limit". `;
+      callAgain = false;
     } else {
-      note = `The last advisor call gave no verdict ("${r.text.replace(/\s+/g, ' ').trim().slice(0, 160)}"). `;
-      if (!LIMIT_RE.test(r.text)) {
-        note += 'Call it again. ';
-      } else if (fb.model === 'off' || failed.model === fb.model) {
-        note += `${fb.model === 'off' ? 'The fallback is off' : 'The fallback failed too'}: tell the user and end with "Review not run: model limit". `;
-        callAgain = false;
-      } else {
-        note += `If Fable is at its limit or unavailable, call it with model "${fb.model}" and effort "${fb.effort}" and keep that for this task. If no model can review it, tell the user and end with "Review not run: model limit". `;
-      }
+      note += `If Fable is at its limit or unavailable, call it with model "${fb.model}" and effort "${fb.effort}" and keep that for this task. If no model can review it, tell the user and end with "Review not run: model limit". `;
     }
   }
 
@@ -332,7 +346,7 @@ function modeStop(input) {
   } else if (verdictOf(lastRound) === 'REVISE') {
     reason = `Round ${rounds.length} of ${MAX_ROUNDS}: the advisor asked for changes and nothing was done. ${note}`;
     if (callAgain) reason += `Fix each issue or give your reason, then call round ${next}. `;
-    reason += 'If you need the user\'s answer first, end with "Review paused: waiting for your answer".';
+    reason += 'If you need the user\'s answer first, ask the question and end with "Review paused: waiting for your answer".';
   }
   if (!reason) allow();
 

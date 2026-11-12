@@ -8,7 +8,8 @@ Skip both for questions, explanations, reviews of existing work, chat and lookup
 
 ## Calling a reviewer
 
-- Use the Agent tool with `run_in_background: false`, and set `description` to "Plan review by <model> <effort>" or "Result review by <model> <effort>", for example "Result review by Fable 5.2 Medium". Use the model's full name and version.
+- Use the Agent tool with `run_in_background: false`. If the review runs in the background anyway, do not start another one: end your turn with the running line and continue when its result arrives.
+- Set `description` to "Plan review by <model> <effort>" or "Result review by <model> <effort>", for example "Result review by Fable 5.2 Medium". Use the model's full name and version.
 - Both run on Fable at medium effort by default.
 - After each review a hook tells you the model and effort that actually ran, for example "Fable 5.2 Medium". Use that name in the final line.
 <!-- fallback:on -->
@@ -37,7 +38,7 @@ Send: ORIGINAL REQUEST (word for word), WORK DONE, FILES (every file changed), P
 
 - APPROVE: finish.
 - REVISE: fix every issue, or give your reason for disagreeing, and call the next round. Max 4 rounds; after round 4 list the open issues.
-- If an issue needs the user's answer, ask and end with the paused line. The loop restarts at round 1 after they answer.
+- If an issue needs the user's answer, ask the question and end with the paused line. Use the paused line only when your message asks the user a question. The loop restarts at round 1 after they answer.
 
 A Stop hook enforces this and tells you what is missing. If it lists changed files this task did not make and you used no edit tool, end with the skipped line.
 
@@ -49,6 +50,7 @@ End with exactly one of these as the last line (the hook reads only the last lin
 - `Reviewed by <reviewer>: approved (round N)`
 - `Plan review by <reviewer> · Reviewed by <reviewer>: approved (round N)`
 - `Reviewed by <reviewer>: not approved after 4 rounds`
+- `Review running: I'll confirm when it's done`
 - `Review paused: waiting for your answer`
 - `Review not run: model limit`
 - `Review skipped: changes not made by this task`

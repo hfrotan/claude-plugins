@@ -1,6 +1,6 @@
 {
   "name": "hfro",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Two read-only reviewers: a plan-advisor for larger or riskier plans and an advisor that must approve every change before it reaches you, enforced by hooks. Falls back to another model when Fable hits its limit.",
   "author": {
     "name": "hfrotan"
