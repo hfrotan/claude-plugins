@@ -5,7 +5,8 @@
 //
 // Modes (first argument):
 //   session-start  SessionStart: print the Advisor workflow with the user's
-//                  fallback settings filled in. Plain stdout becomes context.
+//                  fallback settings filled in (plain stdout becomes context),
+//                  and remove this hook's temp files older than 7 days.
 //   prompt         UserPromptSubmit: record a fingerprint of the git working
 //                  tree, so changes made by any means (shell, MCP, subagents)
 //                  can be detected later. Prints nothing.
@@ -18,17 +19,22 @@
 //
 // The stop gate lets the session finish when: nothing changed, the user said
 // noadvisor / no advisor, the advisor approved the latest version, 4 rounds
-// with a verdict were used, the session wrote "Advisor: paused" (it is waiting
-// for the user) or "Advisor: not run" after a failed call, or the session ignored the gate twice in a row (so it can
-// never loop). An advisor call that returned no verdict (for example because
-// the model hit its usage limit) does not count as a round; the block message
-// then names the fallback model and effort.
+// with a verdict were used, the last line of the final message is
+// "Advisor: paused ..." (waiting for the user), "Advisor: not run ..." (after
+// a failed call) or "Advisor: skipped ..." (only when no edit tool was used and
+// the tree changed for another reason), or the session ignored the gate twice
+// in a row (so it can never loop). An advisor call that returned no verdict
+// (for example because the model hit its usage limit, or because it was started
+// in the background) does not count as a round; the block message then says
+// what to do, naming the fallback model and effort.
 //
 // Change detection: in a git repository the working tree (tracked and
 // untracked, .gitignore respected) is hashed through a private index file in
 // the temp directory; this writes git objects but never touches the real index
-// or the files. Outside git, only the main session's Write/Edit/MultiEdit/
-// NotebookEdit calls are seen; the Advisor workflow text covers the rest.
+// or the files. The repository is the one the session was in when the user sent
+// the prompt. Outside git, only the main session's Write/Edit/MultiEdit/
+// NotebookEdit calls are seen (files in the temp directory do not count); the
+// Advisor workflow text covers the rest.
 //
 // Plan reviews use a separate subagent (plan-advisor), so they do not count
 // as review rounds and never satisfy this gate.
@@ -48,16 +54,23 @@ const isAdvisor = (t) => typeof t === 'string' && (t === AGENT_NAME || t.endsWit
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const AGENT_TOOLS = new Set(['Agent', 'Task']);
 const SKIP_RE = /(^|[^a-z])no[\s-]?advisor\b/i;
-const VERDICT_RE = /VERDICT:\s*\**\s*(APPROVE|REVISE)\b/i;
+const VERDICT_RE = /VERDICT\**\s*:\s*\**\s*(APPROVE|REVISE)\b/i;
 const ASYNC_RE = /\bagent launched\b|running in the background/i;
 const LIMIT_RE = /hit your (session |weekly |usage )?limit|usage limit|rate[ _-]?limit|\b429\b|\b529\b|overloaded|terminated early due to an API error|API Error/i;
-const PAUSED_RE = /Advisor:\s*paused/i;
-const NOT_RUN_RE = /Advisor:\s*not run/i;
+// Final-message markers; they count only on the last non-empty line.
+const PAUSED_RE = /^[\s*_>`]*Advisor:\s*paused\b/i;
+const NOT_RUN_RE = /^[\s*_>`]*Advisor:\s*not run\b/i;
+const SKIPPED_RE = /^[\s*_>`]*Advisor:\s*skipped\b/i;
+// Stop-hook feedback injected into the transcript, which is not a prompt.
+const FEEDBACK_RE = /^\s*(Stop hook feedback|\[[^\]\n]*hook\]:|Files were changed but the advisor|Round \d+ of \d+: the advisor asked)/i;
 const BLOCK_MARKER = 'the advisor has not reviewed the latest version';
 const REVISE_MARKER = 'the advisor asked for changes';
-const MODELS = ['opus', 'sonnet', 'haiku', 'fable', 'off'];
+const NOT_RUN_LINE = '"Advisor: not run - model limit"';
+const MODELS = ['opus', 'sonnet', 'haiku', 'off'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const GIT_TIMEOUT_MS = 5000;
+const MAX_LISTED = 10;
+const STALE_MS = 7 * 24 * 3600 * 1000;
 
 function allow() {
   process.exit(0);
@@ -111,22 +124,31 @@ function saveState(input, state) {
   fs.writeFileSync(statePath(input), JSON.stringify(state));
 }
 
-// Hash of the whole working tree (tracked and untracked, .gitignore respected),
-// or null outside git or on any error. Uses a private index per session and
-// repository, so it never touches the real index. Commits do not change it.
-function fingerprint(input) {
-  const cwd = input.cwd || process.cwd();
-  const git = (args, env) =>
-    execFileSync('git', args, {
-      cwd,
-      env: env || process.env,
-      timeout: GIT_TIMEOUT_MS,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 16 * 1024 * 1024,
-    }).toString().trim();
+function runGit(cwd, args, env) {
+  return execFileSync('git', args, {
+    cwd,
+    env: env || process.env,
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ['ignore', 'pipe', 'ignore'],
+    maxBuffer: 16 * 1024 * 1024,
+  }).toString().trim();
+}
+
+// "<repo top>:<tree hash>" -> [top, tree]
+function splitFp(fp) {
+  const at = fp.lastIndexOf(':');
+  return [fp.slice(0, at), fp.slice(at + 1)];
+}
+
+// Hash of the whole working tree (tracked and untracked, .gitignore respected)
+// as "<repo top>:<tree hash>", or null outside git or on any error. Uses a
+// private index per session and repository, so it never touches the real
+// index. Commits do not change it.
+function fingerprint(input, dir) {
+  const cwd = dir || input.cwd || process.cwd();
   try {
-    const top = git(['rev-parse', '--show-toplevel']);
-    const gitDir = git(['rev-parse', '--absolute-git-dir']);
+    const top = runGit(cwd, ['rev-parse', '--show-toplevel']);
+    const gitDir = runGit(cwd, ['rev-parse', '--absolute-git-dir']);
     const tag = crypto.createHash('sha1').update(top).digest('hex').slice(0, 12);
     const index = path.join(os.tmpdir(), `hfro-gate-${sessionKey(input)}-${tag}.index`);
     if (!fs.existsSync(index)) {
@@ -137,14 +159,55 @@ function fingerprint(input) {
       }
     }
     const env = { ...process.env, GIT_INDEX_FILE: index };
-    git(['-C', top, 'add', '-A', '--ignore-errors', '.'], env);
-    return `${top}:${git(['-C', top, 'write-tree'], env)}`;
+    try {
+      runGit(top, ['add', '-A', '--ignore-errors', '.'], env);
+    } catch (e) {
+      // An unreadable file makes git add exit 1 but the rest is indexed; only
+      // a timeout or a signal makes the fingerprint unusable.
+      if (e.code === 'ETIMEDOUT' || e.signal) throw e;
+    }
+    return `${top}:${runGit(top, ['write-tree'], env)}`;
   } catch {
     return null;
   }
 }
 
+// The repository to watch: the one the session was in at the prompt.
+function watchedDir(input, state) {
+  return typeof state.baseline === 'string' ? splitFp(state.baseline)[0] : input.cwd;
+}
+
+// Paths that differ between two fingerprints of the same repository.
+function changedPaths(a, b) {
+  try {
+    const [top, ta] = splitFp(a);
+    const tb = splitFp(b)[1];
+    return runGit(top, ['diff-tree', '-r', '--name-only', ta, tb]).split('\n').filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function cleanStaleFiles() {
+  try {
+    const dir = os.tmpdir();
+    const cutoff = Date.now() - STALE_MS;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.startsWith('hfro-gate-')) continue;
+      const file = path.join(dir, name);
+      try {
+        if (fs.statSync(file).mtimeMs < cutoff) fs.unlinkSync(file);
+      } catch {
+        // Another session's file, or already gone.
+      }
+    }
+  } catch {
+    // Cleanup is best effort.
+  }
+}
+
 function modeSessionStart() {
+  cleanStaleFiles();
   const file = path.join(__dirname, '..', 'advisor-workflow.md');
   let text;
   try {
@@ -166,9 +229,13 @@ function modeSessionStart() {
 
 function modePrompt(input) {
   const state = loadState(input);
-  state.baseline = fingerprint(input);
+  // Clear the old baseline first: if this hook is killed by its timeout, the
+  // stop gate must not compare against the previous prompt's tree.
+  state.baseline = null;
   state.reviews = {};
   try {
+    saveState(input, state);
+    state.baseline = fingerprint(input);
     saveState(input, state);
   } catch {
     // Without a baseline the stop gate falls back to the edit tools.
@@ -181,7 +248,7 @@ function modeReview(input) {
   if (!AGENT_TOOLS.has(input.tool_name) || !isAdvisor(ti.subagent_type)) process.exit(0);
   const state = loadState(input);
   state.reviews = state.reviews && typeof state.reviews === 'object' ? state.reviews : {};
-  state.reviews[String(input.tool_use_id || 'last')] = fingerprint(input);
+  state.reviews[String(input.tool_use_id || 'last')] = fingerprint(input, watchedDir(input, state));
   try {
     saveState(input, state);
   } catch {
@@ -198,6 +265,32 @@ function textOf(content) {
     .join('\n');
 }
 
+function lastLine(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines.length ? lines[lines.length - 1] : '';
+}
+
+const isUnder = (abs, root) => abs === root || abs.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
+
+// Edits to files in the temp directory (scratch files) are not changes, unless
+// the watched repository itself is there.
+function isScratch(p, repoTop) {
+  const file = p.input && (p.input.file_path || p.input.notebook_path);
+  if (typeof file !== 'string' || !file) return false;
+  const abs = path.resolve(file);
+  if (repoTop && isUnder(abs, repoTop)) return false;
+  const roots = new Set([os.tmpdir(), '/tmp']);
+  try {
+    roots.add(fs.realpathSync(os.tmpdir()));
+  } catch {
+    // Keep the plain path.
+  }
+  for (const root of roots) {
+    if (isUnder(abs, root)) return true;
+  }
+  return false;
+}
+
 function promptText(e) {
   const c = e.message.content;
   const raw = typeof c === 'string'
@@ -209,8 +302,8 @@ function promptText(e) {
 
 // A real prompt typed by the user. Injected entries (system reminders,
 // subagent hand-backs, task notifications, compaction summaries, attachment
-// notes, this hook's own feedback) are not prompts: counting them would move
-// the scan window past the edits.
+// notes, stop-hook feedback) are not prompts: counting them would move the
+// scan window past the edits.
 function isUserPrompt(e) {
   if (!e || e.type !== 'user' || !e.message || e.isSidechain || e.isMeta) return false;
   if (e.isCompactSummary || e.isVisibleInTranscriptOnly) return false;
@@ -224,7 +317,7 @@ function isUserPrompt(e) {
   }
   const text = promptText(e);
   if (!text.trim()) return false;
-  if (text.includes(BLOCK_MARKER) || text.includes(REVISE_MARKER)) return false;
+  if (FEEDBACK_RE.test(text)) return false;
   // Fallback for entries that carry no origin fields.
   if (/^\s*(<task-notification>|<local-command-stdout>|<local-command-caveat>|\[Request interrupted)/.test(text)) return false;
   return true;
@@ -265,10 +358,13 @@ function modeStop(input) {
   // User asked to skip the advisor for this task.
   if (SKIP_RE.test(promptText(entries[lastUser]))) allow();
 
+  const state = loadState(input);
+  const repoTop = typeof state.baseline === 'string' ? splitFp(state.baseline)[0] : null;
+
   // Scan the main session's tool calls and their results since that prompt.
   let lastEdit = -1;
   let lastText = '';
-  const calls = []; // advisor calls: { i, id }
+  const calls = []; // advisor calls: { i, id, model }
   const results = {}; // tool_use_id -> { text, async }
   for (let i = lastUser + 1; i < entries.length; i++) {
     const e = entries[i];
@@ -279,8 +375,10 @@ function modeStop(input) {
         if (!p) continue;
         if (p.type === 'text' && p.text) lastText = p.text;
         if (p.type !== 'tool_use') continue;
-        if (EDIT_TOOLS.has(p.name)) lastEdit = i;
-        if (AGENT_TOOLS.has(p.name) && p.input && isAdvisor(p.input.subagent_type)) calls.push({ i, id: p.id });
+        if (EDIT_TOOLS.has(p.name) && !isScratch(p, repoTop)) lastEdit = i;
+        if (AGENT_TOOLS.has(p.name) && p.input && isAdvisor(p.input.subagent_type)) {
+          calls.push({ i, id: p.id, model: String(p.input.model || '').toLowerCase() });
+        }
       }
     } else if (e.type === 'user') {
       const tur = e.toolUseResult && typeof e.toolUseResult === 'object' ? e.toolUseResult : {};
@@ -295,60 +393,90 @@ function modeStop(input) {
     }
   }
 
-  // A call is a review round when it returned a verdict, was launched in the
-  // background (its verdict arrives later), or its result is not in the
-  // transcript yet. A call that returned without a verdict failed.
+  // A call is a review round when it returned a verdict, or its result is not
+  // in the transcript yet. A call that returned without a verdict (an error, or
+  // a background launch whose verdict is not part of this turn) does not count.
   const verdictOf = (c) => {
     const r = results[c.id];
-    const m = r && VERDICT_RE.exec(r.text);
+    const m = r && !r.async && VERDICT_RE.exec(r.text);
     return m ? m[1].toUpperCase() : null;
   };
-  const isReview = (c) => {
-    const r = results[c.id];
-    return !r || r.async || verdictOf(c) !== null;
-  };
+  const isReview = (c) => !results[c.id] || verdictOf(c) !== null;
   const reviews = calls.filter(isReview);
   const rounds = reviews.length;
   const lastReview = reviews.length ? reviews[reviews.length - 1] : null;
   const lastCall = calls.length ? calls[calls.length - 1] : null;
-  const failed = lastCall && !isReview(lastCall) ? results[lastCall.id].text : null;
+  const failedCall = lastCall && !isReview(lastCall) ? lastCall : null;
 
-  const state = loadState(input);
-  const now = fingerprint(input);
+  const now = fingerprint(input, watchedDir(input, state));
   const treeChanged = now !== null && typeof state.baseline === 'string' && state.baseline !== now;
 
   if (lastEdit < 0 && !treeChanged) allow(); // Nothing changed: treat as trivial.
   if (rounds >= MAX_ROUNDS) allow(); // Round limit reached.
-  const lastMsg = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : lastText;
+  const lastMsg = lastLine(typeof input.last_assistant_message === 'string' ? input.last_assistant_message : lastText);
   if (PAUSED_RE.test(lastMsg)) allow(); // Waiting for the user's answer.
-  if (failed && NOT_RUN_RE.test(lastMsg)) allow(); // No model could review; the user was told.
+  if (failedCall && NOT_RUN_RE.test(lastMsg)) allow(); // No model could review; the user was told.
 
-  let reason = null;
   const reviewedTree = lastReview && state.reviews ? state.reviews[String(lastReview.id)] : undefined;
   const upToDate =
     lastReview &&
     lastReview.i > lastEdit &&
     (now === null || typeof reviewedTree !== 'string' || reviewedTree === now);
 
+  // What to say about a failed last call, and whether to ask for another call.
   const fb = fallbackSettings();
-  const fallbackHint =
-    fb.model === 'off'
-      ? ''
-      : ` If it failed because Fable is at its usage or rate limit or unavailable, call it with model "${fb.model}" and effort "${fb.effort}" (Agent tool parameters), and keep that for the rest of this task.`;
-
-  if (!upToDate) {
-    reason = `Files were changed but ${BLOCK_MARKER}. `;
-    if (failed) {
-      const snippet = failed.replace(/\s+/g, ' ').trim().slice(0, 160);
-      reason += `The last advisor call returned no verdict ("${snippet}").` + (LIMIT_RE.test(failed) ? fallbackHint : ' Call it again.') + ' ';
+  let failNote = '';
+  let callAgain = true;
+  if (failedCall) {
+    const r = results[failedCall.id];
+    if (r.async) {
+      failNote =
+        'The advisor was started in the background, so its verdict is not part of this turn. ' +
+        'Call it again with run_in_background: false. ';
+    } else {
+      const snippet = r.text.replace(/\s+/g, ' ').trim().slice(0, 160);
+      failNote = `The last advisor call returned no verdict ("${snippet}"). `;
+      if (!LIMIT_RE.test(r.text)) {
+        failNote += 'Call it again. ';
+      } else if (fb.model === 'off') {
+        failNote += `The fallback model is turned off: tell the user the review could not run and end with ${NOT_RUN_LINE}. `;
+        callAgain = false;
+      } else if (failedCall.model === fb.model) {
+        failNote += `The fallback model failed too: tell the user the review could not run and end with ${NOT_RUN_LINE}. `;
+        callAgain = false;
+      } else {
+        failNote +=
+          `If it failed because Fable is at its usage or rate limit or unavailable, call it with model "${fb.model}" ` +
+          `and effort "${fb.effort}" (Agent tool parameters), and keep that for the rest of this task. ` +
+          `If no model can review it, tell the user and end with ${NOT_RUN_LINE}. `;
+      }
     }
-    if (failed && LIMIT_RE.test(failed)) reason += 'If no model can review it, tell the user and end with "Advisor: not run - model limit". ';
-    reason += `Call the advisor subagent now in the foreground (round ${rounds + 1} of ${MAX_ROUNDS}) following the result review in the Advisor workflow, then continue the review loop.`;
+  }
+
+  let reason = null;
+  if (!upToDate) {
+    if (lastEdit < 0 && SKIPPED_RE.test(lastMsg)) allow(); // Tree changed, but not by this task.
+    reason = `Files were changed but ${BLOCK_MARKER}. `;
+    if (lastEdit < 0 && treeChanged) {
+      const paths = changedPaths(state.baseline, now);
+      if (paths.length) {
+        const more = paths.length > MAX_LISTED ? ` and ${paths.length - MAX_LISTED} more` : '';
+        reason += `Changed since the prompt: ${paths.slice(0, MAX_LISTED).join(', ')}${more}. `;
+      }
+      reason +=
+        'If this task did not make these changes (for example the user edited files, or a tool left artifacts), ' +
+        'end your message with "Advisor: skipped - changes not made by this task". ';
+    }
+    reason += failNote;
+    if (callAgain) {
+      reason += `Call the advisor subagent now in the foreground (round ${rounds + 1} of ${MAX_ROUNDS}) following the result review in the Advisor workflow, then continue the review loop.`;
+    }
   } else if (verdictOf(lastReview) === 'REVISE') {
-    reason =
-      `Round ${rounds} of ${MAX_ROUNDS}: ${REVISE_MARKER} (REVISE) and nothing has been done about it. ` +
-      `Fix each issue, or give your reason for disagreeing, then call the advisor again (round ${rounds + 1}). ` +
-      `If you need the user's answer before you can go on, end your message with "Advisor: paused - waiting for your answer".`;
+    reason = `Round ${rounds} of ${MAX_ROUNDS}: ${REVISE_MARKER} (REVISE) and nothing has been done about it. ` + failNote;
+    if (callAgain) {
+      reason += `Fix each issue, or give your reason for disagreeing, then call the advisor again (round ${rounds + 1}). `;
+    }
+    reason += 'If you need the user\'s answer before you can go on, end your message with "Advisor: paused - waiting for your answer".';
   }
   if (!reason) allow();
 
@@ -367,7 +495,7 @@ function modeStop(input) {
     allow(); // Cannot keep the loop guard: do not risk blocking forever.
   }
   if (giveUp) allow();
-  block(reason);
+  block(reason.trim());
 }
 
 const mode = process.argv[2] || 'stop';

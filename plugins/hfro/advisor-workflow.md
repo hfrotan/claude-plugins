@@ -89,17 +89,19 @@ Use the Agent tool with subagent_type "hfro:advisor". The prompt must contain:
 6. ROUND: 1, 2, 3 or 4
 7. From round 2: PREVIOUS ISSUES and, for each, "fixed: how" or "disagree: reason"
 
+Also send PRE-EXISTING CHANGES: the files that already had uncommitted changes before this task started (from `git status` before your first change), or "none". The advisor treats those as out of scope unless this task touched them.
+
 Do not send the plan or the plan-advisor's verdict. The advisor must judge the result against the request, not against the plan it followed.
 
 ### Review loop
 
 - APPROVE: give the user the final result.
 - REVISE: fix every issue, then call the advisor again with ROUND + 1. If you disagree with an issue, do not ignore it silently: say why in the next round and let the advisor decide.
-- If an issue needs the user's answer before you can fix it, ask the user and end your message with "Advisor: paused - waiting for your answer". Continue the loop after they answer.
+- If an issue needs the user's answer before you can fix it, ask the user and end your message with "Advisor: paused - waiting for your answer". After they answer, the loop starts again at round 1, and you send the advisor's open issues as PREVIOUS ISSUES.
 - Maximum 4 rounds. Never call the advisor a 5th time for the same task.
 - If round 4 is not APPROVE: give the user the best version, followed by "Open issues:" listing the advisor's remaining issues.
 
-A Stop hook checks this: if files changed and the advisor has not reviewed the latest version, or its last verdict was REVISE and nothing was done about it, you cannot finish yet. Follow its message.
+A Stop hook checks this: if files changed and the advisor has not reviewed the latest version, or its last verdict was REVISE and nothing was done about it, you cannot finish yet. Follow its message. If the hook lists changed files that this task did not make (the user edited them, or a tool left artifacts) and you used no edit tool, end your message with "Advisor: skipped - changes not made by this task" instead. The markers in the final message count only on its last line.
 
 ## Final message
 
@@ -108,8 +110,9 @@ End the final message with one short line:
 - "Advisor: plan reviewed, approved (round N)" when the plan was also reviewed, or
 - "Advisor: not approved after 4 rounds - see open issues", or
 - "Advisor: paused - waiting for your answer", or
-- "Advisor: not run - model limit"
-- Nothing when the advisor was skipped.
+- "Advisor: not run - model limit", or
+- "Advisor: skipped - changes not made by this task"
+- Nothing when the advisor was skipped for a question or because of "noadvisor".
 
 <!-- fallback:on -->
 When a review used the fallback model, add it in brackets, for example "Advisor: approved (round 2, {{FALLBACK_MODEL}} fallback)".

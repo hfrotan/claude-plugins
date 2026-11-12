@@ -61,13 +61,13 @@ Claude Code's own `fallbackModel` setting does not help here: it only covers ove
 - `/hfro:advisor [focus]` sends the latest result to the advisor now.
 - `/hfro:noadvisor <task>`, or "noadvisor" anywhere in your message, skips both reviews for that task.
 
-The final message ends with one line such as `Advisor: approved (round 2)`, `Advisor: approved (round 1, opus fallback)`, `Advisor: not approved after 4 rounds - see open issues`, `Advisor: paused - waiting for your answer` or `Advisor: not run - model limit`.
+The final message ends with one line such as `Advisor: approved (round 2)`, `Advisor: approved (round 1, opus fallback)`, `Advisor: not approved after 4 rounds - see open issues`, `Advisor: paused - waiting for your answer`, `Advisor: not run - model limit` or `Advisor: skipped - changes not made by this task`. The gate reads these markers only on the last line.
 
 ## How the gate works
 
 - **UserPromptSubmit** records a fingerprint of the git working tree (tracked and untracked files, `.gitignore` respected). This catches changes made by any means: edit tools, shell commands, MCP tools and subagents. Outside a git repository only the main session's Write, Edit, MultiEdit and NotebookEdit calls are seen.
 - **PostToolUse** on the Agent tool records the fingerprint of the tree each advisor review saw.
-- **Stop** blocks the session from finishing when files changed and the latest version was not reviewed, or the last verdict was REVISE and nothing was done about it. An advisor call that returned no verdict (for example a usage-limit error) does not count as a round; the block message then names the fallback model. The gate gives up after being ignored twice in a row, so it can never loop.
+- **Stop** blocks the session from finishing when files changed and the latest version was not reviewed, or the last verdict was REVISE and nothing was done about it. An advisor call that returned no verdict (a usage-limit error, or a call started in the background) does not count as a round; the block message then names the fallback model, or asks for a foreground call. When only the tree changed (no edit tool), the message lists the changed files, and the session can answer with `Advisor: skipped - changes not made by this task` if it did not make them. Files the session writes in the temp directory do not count. The gate gives up after being ignored twice in a row, so it can never loop.
 
 The fingerprint is computed through a private index file in the temp directory, so it never touches your real git index or your files. It does write git objects into `.git/objects`, which `git gc` cleans up.
 
