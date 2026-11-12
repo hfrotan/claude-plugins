@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # hfro hooks. Same logic as advisor-gate.js for machines without Node: keep them in step.
-# Modes: session-start (print the workflow), prompt (record the tree), review (name the
-# reviewer, record the reviewed tree), stop (block until the latest change is reviewed).
+# Modes: session-start (print the workflow), prompt (record the tree), foreground (run reviews
+# in the foreground), review (name the reviewer, record the reviewed tree), stop (block until
+# the latest change is reviewed).
 
 import hashlib
 import json
@@ -184,6 +185,26 @@ def mode_prompt(data):
         save_state(data, state)
     except OSError:
         pass
+    allow()
+
+
+# Ask the harness to run a reviewer in the foreground, so the session waits for the verdict.
+# Anything else, or any doubt, prints nothing.
+def mode_foreground(data):
+    ti = data.get('tool_input')
+    if data.get('tool_name') != 'Agent' or not isinstance(ti, dict):
+        allow()
+    if not (named(ti.get('subagent_type'), 'advisor') or named(ti.get('subagent_type'), 'plan-advisor')):
+        allow()
+    if ti.get('run_in_background') is False:
+        allow()
+    updated = dict(ti)
+    updated['run_in_background'] = False
+    sys.stdout.write(json.dumps({'hookSpecificOutput': {
+        'hookEventName': 'PreToolUse',
+        'permissionDecision': 'allow',
+        'updatedInput': updated,
+    }}))
     allow()
 
 
@@ -439,7 +460,7 @@ def main():
     if mode == 'session-start':
         mode_session_start()
     data = read_input()
-    {'prompt': mode_prompt, 'review': mode_review}.get(mode, mode_stop)(data)
+    {'prompt': mode_prompt, 'foreground': mode_foreground, 'review': mode_review}.get(mode, mode_stop)(data)
 
 
 try:
