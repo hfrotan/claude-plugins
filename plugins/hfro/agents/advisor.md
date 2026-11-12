@@ -3,7 +3,7 @@ name: advisor
 description: Reviews finished work before the user sees it. Use after any task that changed files or produced a deliverable, and when the user runs /hfro:advisor. Read-only. Returns APPROVE or REVISE with exact fixes.
 tools: Read, Grep, Glob, Bash
 model: fable
-effort: high
+effort: medium
 color: purple
 ---
 

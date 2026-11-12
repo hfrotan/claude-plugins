@@ -169,7 +169,7 @@ function modeReview(input) {
     } catch {}
   }
   const res = input.tool_response && typeof input.tool_response === 'object' ? input.tool_response : {};
-  const effort = String(process.env.CLAUDE_CODE_EFFORT_LEVEL || ti.effort || (isAdvisor ? 'high' : 'medium')).toLowerCase();
+  const effort = String(process.env.CLAUDE_CODE_EFFORT_LEVEL || ti.effort || 'medium').toLowerCase();
   const reviewer = `${modelName(res.resolvedModel || ti.model || 'fable')} ${EFFORT_NAMES[effort] || effort}`;
   process.stdout.write(
     JSON.stringify({

@@ -202,7 +202,7 @@ def mode_review(data):
         except OSError:
             pass
     res = data.get('tool_response') if isinstance(data.get('tool_response'), dict) else {}
-    effort = str(os.environ.get('CLAUDE_CODE_EFFORT_LEVEL') or ti.get('effort') or ('high' if is_advisor else 'medium')).lower()
+    effort = str(os.environ.get('CLAUDE_CODE_EFFORT_LEVEL') or ti.get('effort') or 'medium').lower()
     reviewer = '%s %s' % (model_name(res.get('resolvedModel') or ti.get('model') or 'fable'), EFFORT_NAMES.get(effort, effort))
     sys.stdout.write(json.dumps({'hookSpecificOutput': {
         'hookEventName': 'PostToolUse',
