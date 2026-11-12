@@ -5,6 +5,8 @@ A Claude Code plugin with two read-only reviewers:
 - **plan-advisor** checks the plan of a larger or riskier task before work starts (Fable, medium effort).
 - **advisor** checks every change before you see the result (Fable, medium effort). It finds all changes itself with git, runs checks, and returns APPROVE or REVISE. Hooks stop the session from finishing until the latest change is approved, for at most 4 rounds.
 
+You see only the final answer, after the review is done. The plugin asks for the reviews to run in the foreground; if Claude Code still runs one in the background, you see one short line, `Review running: I'll show the result when it's done`, and then the result.
+
 If Fable is at its limit, the reviewers switch to the fallback model, Opus at high effort by default. Each answer ends with one short line naming the reviewer that actually ran, for example:
 
 ```

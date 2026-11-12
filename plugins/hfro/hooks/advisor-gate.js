@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // hfro hooks. advisor-gate.py is the same logic for machines without Node: keep them in step.
-// Modes: session-start (print the workflow), prompt (record the tree), review (name the
-// reviewer, record the reviewed tree), stop (block until the latest change is reviewed).
+// Modes: session-start (print the workflow), prompt (record the tree), foreground (run reviews
+// in the foreground), review (name the reviewer, record the reviewed tree), stop (block until
+// the latest change is reviewed).
 
 const fs = require('fs');
 const os = require('os');
@@ -153,6 +154,25 @@ function modePrompt(input) {
     state.baseline = fingerprint(input);
     saveState(input, state);
   } catch {}
+  allow();
+}
+
+// Ask the harness to run a reviewer in the foreground, so the session waits for the verdict.
+// Anything else, or any doubt, prints nothing.
+function modeForeground(input) {
+  const ti = input.tool_input;
+  if (input.tool_name !== 'Agent' || !ti || typeof ti !== 'object' || Array.isArray(ti)) allow();
+  if (!(named(ti.subagent_type, 'advisor') || named(ti.subagent_type, 'plan-advisor'))) allow();
+  if (ti.run_in_background === false) allow();
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        updatedInput: { ...ti, run_in_background: false },
+      },
+    })
+  );
   allow();
 }
 
@@ -371,6 +391,7 @@ try {
   if (mode === 'session-start') modeSessionStart();
   const input = readInput();
   if (mode === 'prompt') modePrompt(input);
+  else if (mode === 'foreground') modeForeground(input);
   else if (mode === 'review') modeReview(input);
   else modeStop(input);
 } catch {
