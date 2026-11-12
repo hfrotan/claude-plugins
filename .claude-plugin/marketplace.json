@@ -6,9 +6,12 @@
   "description": "Personal Claude Code plugins.",
   "plugins": [
     {
-      "name": "advisor-kit",
-      "source": "./plugins/advisor-kit",
-      "description": "Plan review before larger tasks and an enforced result review before every non-trivial answer, plus an on-demand prompt optimizer."
+      "name": "hfro",
+      "source": "./plugins/hfro",
+      "description": "Plan review before larger tasks and an enforced, detailed result review before every non-trivial answer, with an Opus fallback when Fable hits its limit."
     }
-  ]
+  ],
+  "renames": {
+    "advisor-kit": "hfro"
+  }
 }

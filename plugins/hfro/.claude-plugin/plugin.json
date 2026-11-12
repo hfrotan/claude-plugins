@@ -1,0 +1,35 @@
+{
+  "name": "hfro",
+  "version": "2.1.0",
+  "description": "Two read-only reviewers: a plan-advisor for larger or riskier plans and an advisor that must approve every change before it reaches you, enforced by hooks. Falls back to another model when Fable hits its limit.",
+  "author": {
+    "name": "hfrotan"
+  },
+  "userConfig": {
+    "fallback_model": {
+      "type": "string",
+      "title": "Fallback model for the reviewers",
+      "description": "Model the advisor and plan-advisor use when Fable is at its usage or rate limit or unavailable: opus, sonnet, haiku, or off (no fallback).",
+      "default": "opus",
+      "options": [
+        "opus",
+        "sonnet",
+        "haiku",
+        "off"
+      ]
+    },
+    "fallback_effort": {
+      "type": "string",
+      "title": "Fallback effort",
+      "description": "Effort level for the fallback model: low, medium, high, xhigh or max.",
+      "default": "high",
+      "options": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    }
+  }
+}

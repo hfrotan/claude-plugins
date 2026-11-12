@@ -1,43 +1,56 @@
-# advisor-kit
+# hfro
 
-A Claude Code plugin that adds two read-only reviewers to every session, plus a prompt helper you call when you want it:
+A Claude Code plugin with two read-only reviewers:
 
-- **plan-advisor** checks the plan of a larger or riskier task before any work starts. It runs only when the plan has several steps, a real choice between approaches, ambiguous requirements, or a hard-to-undo step.
-- **advisor** must approve every non-trivial result before it reaches you. A Stop hook enforces this: a session that changed files cannot finish until the advisor has reviewed the latest version (at most 4 rounds).
-- **prompt-optimizer** improves a draft prompt, for Claude or any other AI tool, only when you ask. It returns the improved prompt, what changed and why, optional additions you can choose to include, and any questions. It never runs the prompt. It uses the same model as your session (`model: inherit`).
+- **plan-advisor** checks the plan of a larger or riskier task before work starts (Fable, medium effort).
+- **advisor** checks every change before you see the result (Fable, high effort). It finds all changes itself with git, runs checks, and returns APPROVE or REVISE. Hooks stop the session from finishing until the latest change is approved, for at most 4 rounds.
 
-The workflow instructions are loaded into each session at start-up by a SessionStart hook, so nothing is written into your projects' CLAUDE.md.
+If Fable is at its limit, the reviewers switch to the fallback model, Opus at high effort by default. Each answer ends with one short line naming the reviewer that actually ran, for example:
+
+```
+Plan review by Fable 5.2 Medium · Reviewed by Opus 5.5 High: approved (round 2)
+```
 
 ## Install
 
-In a terminal, once per computer:
-
 ```bash
 claude plugin marketplace add hfrotan/claude-plugins
-claude plugin install advisor-kit@hfrotan-tools --scope user
+```
+```bash
+claude plugin install hfro@hfrotan-tools --scope user
 ```
 
-Or inside a Claude Code session: `/plugin marketplace add hfrotan/claude-plugins`, then `/plugin install advisor-kit@hfrotan-tools`. Start a new session (or run `/reload-plugins`) to load it.
+If you used the old `advisor-kit` plugin, remove it so the hooks do not run twice:
+
+```bash
+claude plugin uninstall advisor-kit@hfrotan-tools --scope user
+```
 
 ## Update
 
 ```bash
 claude plugin marketplace update hfrotan-tools
-claude plugin update advisor-kit@hfrotan-tools
+```
+```bash
+claude plugin update hfro@hfrotan-tools
 ```
 
-To skip these commands, turn on auto-update for the marketplace in `/plugin` > Marketplaces.
+## Settings
 
-Bump `version` in `plugins/advisor-kit/.claude-plugin/plugin.json` whenever you change the plugin.
+Change them inside a session with `/plugin configure hfro@hfrotan-tools`. They apply from the next session.
+
+| Setting | Values | Default |
+|---|---|---|
+| `fallback_model` | `opus`, `sonnet`, `haiku`, `off` | `opus` |
+| `fallback_effort` | `low`, `medium`, `high`, `xhigh`, `max` | `high` |
 
 ## Use
 
-- `/advisor-kit:advisor [focus]` sends the latest result to the advisor now.
-- `/advisor-kit:noadvisor <task>`, or "noadvisor" anywhere in your message, skips both reviews for that task.
-- `/advisor-kit:improve-prompt <draft>` returns an improved version of the draft prompt for you to copy.
+- `/hfro:advisor [focus]` reviews the latest result now.
+- `/hfro:noadvisor <task>`, or "noadvisor" in your message, skips both reviews for that task.
 
-## Requirements
+## Notes
 
-The Stop hook runs with Node.js when it is installed and falls back to Python 3 (`advisor-gate.py`) when it is not. Hooks need a POSIX shell: on Windows that is Git Bash. Keep `advisor-gate.js` and `advisor-gate.py` in step: any change to one must be made in the other.
-
-The two reviewers use `model: fable` (the newest Fable model your account can use) at medium effort.
+- Change detection hashes the git working tree through a private index in the temp folder. It never touches your files or your git index. Outside git, only the edit tools are seen.
+- The hooks run with Node.js, or Python 3 when Node is missing. Keep `advisor-gate.js` and `advisor-gate.py` in step.
+- Bump `version` in `plugins/hfro/.claude-plugin/plugin.json` on every change.
