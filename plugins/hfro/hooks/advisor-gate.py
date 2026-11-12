@@ -324,17 +324,38 @@ def mode_stop(data):
                 if not isinstance(p, dict) or p.get('type') != 'tool_result' or not p.get('tool_use_id'):
                     continue
                 text = text_of(p.get('content'))
-                results[p['tool_use_id']] = {'text': text, 'async': tur.get('isAsync') is True
-                                             or tur.get('status') == 'async_launched' or bool(ASYNC_RE.search(text))}
+                is_async = (tur.get('isAsync') is True or tur.get('status') == 'async_launched'
+                            or bool(ASYNC_RE.search(text)))
+                agent_id = tur.get('agentId') if isinstance(tur.get('agentId'), str) else ''
+                results[p['tool_use_id']] = {'text': text, 'async': is_async, 'agent_id': agent_id, 'at': i}
 
-    # A round is a call that returned a verdict (or whose result is not written yet).
+    # A background review reports back later in a notice naming its agent id. Until then it is
+    # still running (and counts as a round); a notice without a verdict means it failed.
+    for r in results.values():
+        if not r['async']:
+            continue
+        notice = ''
+        for e in entries[r['at'] + 1:]:
+            if not isinstance(e, dict) or e.get('isSidechain') or e.get('type') in ('assistant', 'progress'):
+                continue
+            raw = json.dumps(e, ensure_ascii=False, separators=(',', ':'))
+            if (r['agent_id'] not in raw) if r['agent_id'] else not VERDICT_RE.search(raw):
+                continue
+            notice = raw.replace('\\n', ' ')
+            if VERDICT_RE.search(raw):
+                break
+        if notice:
+            r.update({'async': False, 'text': notice})
+
+    # A round is a call that returned a verdict, is still running, or whose result is not written yet.
     def verdict_of(c):
         r = results.get(c['id'])
         m = VERDICT_RE.search(r['text']) if r and not r['async'] else None
         return m.group(1).upper() if m else None
 
     def is_round(c):
-        return results.get(c['id']) is None or verdict_of(c) is not None
+        r = results.get(c['id'])
+        return r is None or r['async'] or verdict_of(c) is not None
 
     rounds = [c for c in calls if is_round(c)]
     last_round = rounds[-1] if rounds else None
@@ -344,9 +365,10 @@ def mode_stop(data):
     tree_changed = now is not None and isinstance(baseline, str) and baseline != now
     if (last_edit < 0 and not tree_changed) or len(rounds) >= MAX_ROUNDS:
         allow()
-    last_msg = data.get('last_assistant_message')
-    last_msg = last_line(last_msg if isinstance(last_msg, str) else last_text)
-    if PAUSED_RE.search(last_msg) or (failed and NOT_RUN_RE.search(last_msg)):
+    full_msg = data.get('last_assistant_message')
+    full_msg = full_msg if isinstance(full_msg, str) else last_text
+    last_msg = last_line(full_msg)
+    if (PAUSED_RE.search(last_msg) and '?' in full_msg) or (failed and NOT_RUN_RE.search(last_msg)):
         allow()
 
     reviews = state.get('reviews') if isinstance(state.get('reviews'), dict) else {}
@@ -360,20 +382,17 @@ def mode_stop(data):
     call_again = True
     if failed:
         r = results[failed['id']]
-        if r['async']:
-            note = 'The advisor ran in the background, so its verdict is missing. Call it again with run_in_background: false. '
+        note = 'The last advisor call gave no verdict ("%s"). ' % re.sub(r'\s+', ' ', r['text']).strip()[:160]
+        if not LIMIT_RE.search(r['text']):
+            note += 'Call it again. '
+        elif fb['model'] == 'off' or failed['model'] == fb['model']:
+            note += '%s: tell the user and end with "Review not run: model limit". ' % (
+                'The fallback is off' if fb['model'] == 'off' else 'The fallback failed too')
+            call_again = False
         else:
-            note = 'The last advisor call gave no verdict ("%s"). ' % re.sub(r'\s+', ' ', r['text']).strip()[:160]
-            if not LIMIT_RE.search(r['text']):
-                note += 'Call it again. '
-            elif fb['model'] == 'off' or failed['model'] == fb['model']:
-                note += '%s: tell the user and end with "Review not run: model limit". ' % (
-                    'The fallback is off' if fb['model'] == 'off' else 'The fallback failed too')
-                call_again = False
-            else:
-                note += ('If Fable is at its limit or unavailable, call it with model "%s" and effort "%s" and keep that '
-                         'for this task. If no model can review it, tell the user and end with "Review not run: model limit". '
-                         % (fb['model'], fb['effort']))
+            note += ('If Fable is at its limit or unavailable, call it with model "%s" and effort "%s" and keep that '
+                     'for this task. If no model can review it, tell the user and end with "Review not run: model limit". '
+                     % (fb['model'], fb['effort']))
 
     reason = ''
     if not up_to_date:
@@ -393,7 +412,7 @@ def mode_stop(data):
         reason = 'Round %d of %d: the advisor asked for changes and nothing was done. %s' % (len(rounds), MAX_ROUNDS, note)
         if call_again:
             reason += 'Fix each issue or give your reason, then call round %d. ' % nxt
-        reason += 'If you need the user\'s answer first, end with "Review paused: waiting for your answer".'
+        reason += 'If you need the user\'s answer first, ask the question and end with "Review paused: waiting for your answer".'
     if not reason:
         allow()
 
