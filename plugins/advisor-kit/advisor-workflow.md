@@ -10,6 +10,8 @@ Skip both for questions, explanations, reviews of existing work, chat, and looku
 
 Skip both when the user's latest message contains "noadvisor" or "no advisor", or used the /advisor-kit:noadvisor command. This applies to that task only.
 
+Improving a prompt with /advisor-kit:improve-prompt needs neither review: nothing is changed, and the user decides what to send.
+
 ## Plan review (before the work)
 
 ### When to call the plan-advisor

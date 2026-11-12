@@ -1,9 +1,10 @@
 # advisor-kit
 
-A Claude Code plugin that adds two read-only reviewers to every session:
+A Claude Code plugin that adds two read-only reviewers to every session, plus a prompt helper you call when you want it:
 
 - **plan-advisor** checks the plan of a larger or riskier task before any work starts. It runs only when the plan has several steps, a real choice between approaches, ambiguous requirements, or a hard-to-undo step.
 - **advisor** must approve every non-trivial result before it reaches you. A Stop hook enforces this: a session that changed files cannot finish until the advisor has reviewed the latest version (at most 4 rounds).
+- **prompt-optimizer** improves a draft prompt, for Claude or any other AI tool, only when you ask. It returns the improved prompt, what changed and why, optional additions you can choose to include, and any questions. It never runs the prompt. It uses the same model as your session (`model: inherit`).
 
 The workflow instructions are loaded into each session at start-up by a SessionStart hook, so nothing is written into your projects' CLAUDE.md.
 
@@ -33,9 +34,10 @@ Bump `version` in `plugins/advisor-kit/.claude-plugin/plugin.json` whenever you 
 
 - `/advisor-kit:advisor [focus]` sends the latest result to the advisor now.
 - `/advisor-kit:noadvisor <task>`, or "noadvisor" anywhere in your message, skips both reviews for that task.
+- `/advisor-kit:improve-prompt <draft>` returns an improved version of the draft prompt for you to copy.
 
 ## Requirements
 
 The Stop hook runs with Node.js when it is installed and falls back to Python 3 (`advisor-gate.py`) when it is not. Hooks need a POSIX shell: on Windows that is Git Bash. Keep `advisor-gate.js` and `advisor-gate.py` in step: any change to one must be made in the other.
 
-Both agents use `model: fable` (the newest Fable model your account can use) at medium effort.
+The two reviewers use `model: fable` (the newest Fable model your account can use) at medium effort.

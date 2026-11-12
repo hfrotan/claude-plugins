@@ -8,7 +8,7 @@
     {
       "name": "advisor-kit",
       "source": "./plugins/advisor-kit",
-      "description": "Plan review before larger tasks and an enforced result review before every non-trivial answer."
+      "description": "Plan review before larger tasks and an enforced result review before every non-trivial answer, plus an on-demand prompt optimizer."
     }
   ]
 }
