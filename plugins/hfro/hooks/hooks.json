@@ -1,0 +1,49 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v node >/dev/null 2>&1 && exec node \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.js\" session-start || exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.py\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v node >/dev/null 2>&1 && exec node \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.js\" prompt || exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.py\" prompt",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v node >/dev/null 2>&1 && exec node \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.js\" review || exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.py\" review",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v node >/dev/null 2>&1 && exec node \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.js\" stop || exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.py\" stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

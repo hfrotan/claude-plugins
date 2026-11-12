@@ -1,6 +1,0 @@
-{
-  "name": "advisor-kit",
-  "version": "1.2.0",
-  "description": "Two read-only reviewers for Claude Code: a plan-advisor that checks larger or riskier plans before work starts, and an advisor that must approve every non-trivial result before it reaches the user (enforced by a Stop hook). Also a prompt-optimizer that improves a draft prompt on request.",
-  "author": { "name": "hfrotan" }
-}

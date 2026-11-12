@@ -2,7 +2,6 @@
 name: plan-advisor
 description: Reviews a plan before work starts. Use before any task that is large, ambiguous, has a real choice between approaches, or includes hard-to-undo actions, and again mid-task if the plan turns out to be wrong. Read-only. Returns PROCEED or REVISE with objections and gaps; it does not rewrite the plan.
 tools: Read, Grep, Glob
-disallowedTools: Write, Edit, NotebookEdit, Bash, Agent
 model: fable
 effort: medium
 color: blue
