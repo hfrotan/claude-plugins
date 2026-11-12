@@ -1,0 +1,14 @@
+{
+  "name": "hfrotan-tools",
+  "owner": {
+    "name": "hfrotan"
+  },
+  "description": "Personal Claude Code plugins.",
+  "plugins": [
+    {
+      "name": "advisor-kit",
+      "source": "./plugins/advisor-kit",
+      "description": "Plan review before larger tasks and an enforced result review before every non-trivial answer."
+    }
+  ]
+}

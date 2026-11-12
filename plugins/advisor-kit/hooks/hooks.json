@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat \"${CLAUDE_PLUGIN_ROOT}/advisor-workflow.md\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v node >/dev/null 2>&1 && exec node \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.js\" || exec python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/advisor-gate.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
