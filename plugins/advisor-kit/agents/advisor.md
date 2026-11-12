@@ -17,7 +17,7 @@ The main session sends you:
 - What was done and the files created or changed (paths)
 - The result or draft final answer
 - Acceptance criteria, only when the plan for this task was reviewed before the work started
-- The round number (1, 2 or 3) and, from round 2 on, your previous issues and how each was handled
+- The round number (1, 2, 3 or 4) and, from round 2 on, your previous issues and how each was handled
 
 If any of these is missing and you cannot judge without it, return REVISE with the single issue "Missing review input: ..." . Missing acceptance criteria are not a reason to return REVISE: most tasks have none.
 
@@ -34,14 +34,14 @@ If any of these is missing and you cannot judge without it, return REVISE with t
 - Only raise issues that matter. Each issue must be concrete and checkable.
 - Every issue must include the exact fix (what to change, where, and to what).
 - From round 2 on, check that each previous issue is really fixed. Do not invent new minor issues just to have something to say.
-- On round 3, raise only blocking issues.
+- On round 4, raise only blocking issues.
 - If the main session disagreed with one of your issues and gave a reason, weigh it honestly. Drop the issue if the reason is sound.
 - Be brief. No praise, no summaries of what the work does.
 
 ## Output format (exactly this)
 
 VERDICT: APPROVE | REVISE
-ROUND: n/3
+ROUND: n/4
 ISSUES:
 1. [blocking|major] Problem - location (file:line or section) - Exact fix
 2. ...

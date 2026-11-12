@@ -3,7 +3,7 @@
 A Claude Code plugin that adds two read-only reviewers to every session:
 
 - **plan-advisor** checks the plan of a larger or riskier task before any work starts. It runs only when the plan has several steps, a real choice between approaches, ambiguous requirements, or a hard-to-undo step.
-- **advisor** must approve every non-trivial result before it reaches you. A Stop hook enforces this: a session that changed files cannot finish until the advisor has reviewed the latest version (at most 3 rounds).
+- **advisor** must approve every non-trivial result before it reaches you. A Stop hook enforces this: a session that changed files cannot finish until the advisor has reviewed the latest version (at most 4 rounds).
 
 The workflow instructions are loaded into each session at start-up by a SessionStart hook, so nothing is written into your projects' CLAUDE.md.
 

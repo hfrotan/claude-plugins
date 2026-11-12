@@ -6,7 +6,7 @@
 # Blocks the main session from finishing when files were changed since the
 # user's latest prompt and the advisor has not reviewed the latest version.
 # Lets it finish when: no files changed, the user said noadvisor / no advisor,
-# the advisor was called after the last change, 3 rounds were used, or the
+# the advisor was called after the last change, 4 rounds were used, or the
 # session ignored the gate twice in a row (so it can never loop).
 #
 # Limits: it only sees the main session's Write/Edit/MultiEdit/NotebookEdit
@@ -24,7 +24,7 @@ import re
 import sys
 import tempfile
 
-MAX_ROUNDS = 3
+MAX_ROUNDS = 4
 MAX_IGNORED = 2  # blocks in a row that did not lead to an advisor call
 AGENT_NAME = 'advisor'
 

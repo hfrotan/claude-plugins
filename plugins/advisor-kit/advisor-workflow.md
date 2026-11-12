@@ -67,7 +67,7 @@ Use the Agent tool with subagent_type "advisor-kit:advisor". The prompt must con
 3. FILES: every file created or changed (full paths)
 4. RESULT: the result or the draft final answer
 5. ACCEPTANCE CRITERIA: the final list, if the plan was reviewed. Otherwise leave this out.
-6. ROUND: 1, 2 or 3
+6. ROUND: 1, 2, 3 or 4
 7. From round 2: PREVIOUS ISSUES and, for each, "fixed: how" or "disagree: reason"
 
 Do not send the plan or the plan-advisor's verdict. The advisor must judge the result against the request, not against the plan it followed.
@@ -76,15 +76,15 @@ Do not send the plan or the plan-advisor's verdict. The advisor must judge the r
 
 - APPROVE: give the user the final result.
 - REVISE: fix every issue, then call the advisor again with ROUND + 1. If you disagree with an issue, do not ignore it silently: say why in the next round and let the advisor decide.
-- Maximum 3 rounds. Never call the advisor a 4th time for the same task.
-- If round 3 is not APPROVE: give the user the best version, followed by "Open issues:" listing the advisor's remaining issues.
+- Maximum 4 rounds. Never call the advisor a 5th time for the same task.
+- If round 4 is not APPROVE: give the user the best version, followed by "Open issues:" listing the advisor's remaining issues.
 
 ## Final message
 
 End the final message with one short line:
 - "Advisor: approved (round N)" or
 - "Advisor: plan reviewed, approved (round N)" when the plan was also reviewed, or
-- "Advisor: not approved after 3 rounds - see open issues"
+- "Advisor: not approved after 4 rounds - see open issues"
 - Nothing when the advisor was skipped.
 
 Do not show the plan review or the intermediate review rounds unless the user asks.
