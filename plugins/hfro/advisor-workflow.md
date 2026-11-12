@@ -8,9 +8,9 @@ Skip both for questions, explanations, reviews of existing work, chat and lookup
 
 ## Calling a reviewer
 
-- Use the Agent tool with `run_in_background: false`, and set `description` to "Plan review by <model> <effort>" or "Result review by <model> <effort>", for example "Result review by Fable 5.2 High". Use the model's full name and version.
-- Both run on Fable by default: plan-advisor at medium effort, advisor at high.
-- After each review a hook tells you the model and effort that actually ran, for example "Fable 5.2 High". Use that name in the final line.
+- Use the Agent tool with `run_in_background: false`, and set `description` to "Plan review by <model> <effort>" or "Result review by <model> <effort>", for example "Result review by Fable 5.2 Medium". Use the model's full name and version.
+- Both run on Fable at medium effort by default.
+- After each review a hook tells you the model and effort that actually ran, for example "Fable 5.2 Medium". Use that name in the final line.
 <!-- fallback:on -->
 - If a call returns no verdict because Fable is at its usage or rate limit, overloaded or unavailable, call it again with `model: "{{FALLBACK_MODEL}}"` and `effort: "{{FALLBACK_EFFORT}}"` (the user set this in the plugin settings) and keep that for the rest of the task. A failed call is not a round. If the fallback fails too, tell the user.
 <!-- /fallback:on -->
