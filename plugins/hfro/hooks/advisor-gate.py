@@ -22,6 +22,7 @@ MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'off']
 EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 EFFORT_NAMES = {'low': 'Low', 'medium': 'Medium', 'high': 'High', 'xhigh': 'XHigh', 'max': 'Max'}
 SKIP_RE = re.compile(r'(^|[^a-z])no[\s-]?advisor\b', re.I)
+SHORT_RE = re.compile(r'^(?:y|yes|yep|yeah|ok|okay|sure|go|go ahead|do it|please do|yes please|proceed|continue|sounds good|lgtm)\b[\s.!]*$', re.I)
 VERDICT_RE = re.compile(r'VERDICT\**\s*:\s*\**\s*(APPROVE|REVISE)\b', re.I)
 ASYNC_RE = re.compile(r'\bagent launched\b|running in the background', re.I)
 LIMIT_RE = re.compile(
@@ -181,12 +182,13 @@ def mode_prompt(data):
     state = load_state(data)
     state['baseline'] = None  # cleared first, so a killed hook never leaves the previous prompt's tree
     state['reviews'] = {}
-    # A new task (the last one ended with a final review line) needs a new plan review; a
-    # follow-up such as "yes" or an answer to a question keeps the current one.
-    if state.get('ended') or not isinstance(state.get('planned'), bool):
+    # A new task (the last one ended with a final review line) needs a new plan review; a short
+    # reply such as "yes", or an answer to a question asked mid-task, keeps the current one.
+    prompt = str(data.get('prompt') or '').strip()
+    if (state.get('ended') and not SHORT_RE.search(prompt)) or not isinstance(state.get('planned'), bool):
         state['planned'] = False
     state['ended'] = False
-    state['skip'] = bool(SKIP_RE.search(str(data.get('prompt') or '')))
+    state['skip'] = bool(SKIP_RE.search(prompt))
     state['denied'] = 0
     try:
         save_state(data, state)
@@ -408,6 +410,10 @@ def mode_stop(data):
         notice = ''
         for e in entries[r['at'] + 1:]:
             if not isinstance(e, dict) or e.get('isSidechain') or e.get('type') in ('assistant', 'progress'):
+                continue
+            # A tool result (such as a message sent to the reviewer) is not its completion notice.
+            msg = e.get('message') if isinstance(e.get('message'), dict) else {}
+            if isinstance(msg.get('content'), list) and any(isinstance(p, dict) and p.get('type') == 'tool_result' for p in msg['content']):
                 continue
             raw = json.dumps(e, ensure_ascii=False, separators=(',', ':'))
             if (r['agent_id'] not in raw) if r['agent_id'] else not VERDICT_RE.search(raw):

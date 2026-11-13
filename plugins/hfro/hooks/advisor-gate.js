@@ -18,6 +18,7 @@ const MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'off'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max' };
 const SKIP_RE = /(^|[^a-z])no[\s-]?advisor\b/i;
+const SHORT_RE = /^(?:y|yes|yep|yeah|ok|okay|sure|go|go ahead|do it|please do|yes please|proceed|continue|sounds good|lgtm)\b[\s.!]*$/i;
 const VERDICT_RE = /VERDICT\**\s*:\s*\**\s*(APPROVE|REVISE)\b/i;
 const ASYNC_RE = /\bagent launched\b|running in the background/i;
 const LIMIT_RE = /hit your (session |weekly |usage )?limit|usage limit|rate[ _-]?limit|\b429\b|\b529\b|overloaded|terminated early due to an API error|API Error/i;
@@ -151,11 +152,12 @@ function modePrompt(input) {
   const state = loadState(input);
   state.baseline = null; // cleared first, so a killed hook never leaves the previous prompt's tree
   state.reviews = {};
-  // A new task (the last one ended with a final review line) needs a new plan review; a
-  // follow-up such as "yes" or an answer to a question keeps the current one.
-  if (state.ended || typeof state.planned !== 'boolean') state.planned = false;
+  // A new task (the last one ended with a final review line) needs a new plan review; a short
+  // reply such as "yes", or an answer to a question asked mid-task, keeps the current one.
+  const prompt = String(input.prompt || '').trim();
+  if ((state.ended && !SHORT_RE.test(prompt)) || typeof state.planned !== 'boolean') state.planned = false;
   state.ended = false;
-  state.skip = SKIP_RE.test(String(input.prompt || ''));
+  state.skip = SKIP_RE.test(prompt);
   state.denied = 0;
   try {
     saveState(input, state);
@@ -350,6 +352,8 @@ function modeStop(input) {
     for (let j = r.at + 1; j < entries.length; j++) {
       const e = entries[j];
       if (!e || e.isSidechain || e.type === 'assistant' || e.type === 'progress') continue;
+      // A tool result (such as a message sent to the reviewer) is not its completion notice.
+      if (e.message && Array.isArray(e.message.content) && e.message.content.some((p) => p && p.type === 'tool_result')) continue;
       const raw = JSON.stringify(e);
       if (r.agentId ? !raw.includes(r.agentId) : !VERDICT_RE.test(raw)) continue;
       notice = raw.replace(/\\n/g, ' ');
