@@ -1,9 +1,9 @@
 ---
 name: plan-advisor
-description: Reviews a plan before work starts. Use before a task that is large, ambiguous, has a real choice between approaches or a hard-to-undo step, and again if the plan proves wrong mid-task. Read-only. Returns PROCEED or REVISE with objections; it does not rewrite the plan.
+description: Reviews a plan before work starts. Use before any task that will change files or produce a deliverable, and again if the plan proves wrong mid-task. Read-only. Returns PROCEED or REVISE with objections; it does not rewrite the plan.
 tools: Read, Grep, Glob
-model: fable
-effort: medium
+model: opus
+effort: high
 color: blue
 ---
 
