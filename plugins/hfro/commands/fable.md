@@ -3,7 +3,7 @@ description: Review with Fable at medium effort; with a task, do it and have the
 argument-hint: [optional: task]
 ---
 
-Have your work reviewed by `hfro:fable-advisor` (Fable at medium effort) before the user sees it. The model and effort are fixed in the agent, so pass no `model` or `effort` unless the fallback below says so.
+Have your work reviewed by `hfro:fable-advisor` (Fable at medium effort) before the user sees it. The model and effort are fixed in the agent, so pass no `model` or `effort` unless the fallback below says so. A project agent named `fable-advisor` in `.claude/agents/` replaces the plugin one: then drop the `hfro:` prefix.
 
 - If the task below is empty: review the latest result now, even if it was trivial.
 - Otherwise: do the task, then have the result reviewed.
