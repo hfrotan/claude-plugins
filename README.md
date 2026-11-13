@@ -1,16 +1,18 @@
 # hfro
 
-A Claude Code plugin with two read-only reviewers that run only when you ask:
+A Claude Code plugin with read-only reviewers that run only when you ask:
 
-- **plan-advisor** checks the plan of a task before work starts.
-- **advisor** checks the result. It finds all changes itself with git, runs checks, and returns APPROVE or REVISE. Claude fixes the issues and asks again, for at most 4 rounds.
+- The **plan-advisor** checks the plan of a task before work starts: it tests the plan's assumptions against the real files, looks for the likeliest way it fails, and checks that the plan says how the result will be verified.
+- The **advisor** checks the result. It does not rely on Claude's own account of the work: it finds all changes itself with git, runs the tests and the changed behaviour, checks every claim in the draft answer, and returns APPROVE or REVISE. Every issue comes with evidence and an exact fix. Claude fixes the issues and asks again, for at most 4 rounds. Anything the reviewer could not verify is passed on to you.
+
+Each has an Opus version (high effort) and a Fable version (medium effort). The model and effort are fixed in the agent files, so `/hfro:opus` always reviews on Opus at high effort and `/hfro:fable` on Fable at medium effort.
 
 Nothing runs automatically and the plugin has no hooks, so normal tasks cost no extra time or tokens. The review instructions load only when you use a command. You see only the final answer, after the review is done; if Claude Code runs a review in the background, you see one short line, `Review running: I'll show the result when it's done`, and then the result.
 
 If the reviewer is at its limit, Fable switches to Opus at high effort, and Opus switches to Sonnet at high effort. Each reviewed answer ends with one short line naming the reviewer that actually ran, for example:
 
 ```
-Plan review by Opus 5.5 High · Reviewed by Opus 5.5 High: approved (round 2)
+Plan review by Opus High · Reviewed by Opus High: approved (round 2)
 ```
 
 ## Install
@@ -46,4 +48,5 @@ claude plugin update hfro@hfrotan-tools
 ## Notes
 
 - The review steps live in `plugins/hfro/commands/opus.md` and `fable.md`; keep the two in step.
+- The reviewers live in `plugins/hfro/agents/`. The `opus-*` and `fable-*` files differ only in name, description, model and effort; keep the rest in step.
 - Bump `version` in `plugins/hfro/.claude-plugin/plugin.json` on every change.
