@@ -1,6 +1,7 @@
 {
   "name": "hfro",
-  "version": "7.1.0",
+  "displayName": "Advisor",
+  "version": "7.1.1",
   "description": "A read-only advisor for when Claude is stuck: it steps in on its own after repeated failures, errors it cannot explain, risky moves or hard choices, finds the root cause itself and returns one concrete next step. Opus at high effort by default, Fable at medium effort when that is not enough. /hfro:fable and /hfro:opus ask it directly. No hooks.",
   "author": {
     "name": "hfrotan"
