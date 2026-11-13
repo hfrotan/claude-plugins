@@ -21,7 +21,7 @@ Call the Agent tool with `run_in_background: false` and `description` "Advice fr
 - MY THEORY: your current guess, or "none"
 - CONSTRAINTS: anything the user ruled out or required
 
-If a call returns no answer because the model is at its usage or rate limit, overloaded or unavailable, call `hfro:opus-advisor` instead (the advisor is then "Opus High"); if that fails too, call it with `model: "sonnet"` ("Sonnet High"). If no model is left, tell the user and stop.
+If a call returns no answer because the model is at its usage or rate limit, overloaded or unavailable, call the same agent again with `model: "sonnet"` (the advisor is then "Sonnet Medium"). If no model is left, tell the user and stop.
 
 ## After the advice
 

@@ -14,7 +14,7 @@ Claude calls it on its own, without being asked, when:
 
 It does not run for routine work that is going fine. The advisor does not trust Claude's theory: it reproduces the failure, checks the usual blind spots (wrong file, stale build, wrong version, a downstream error), and answers with a diagnosis, its confidence, the evidence, one concrete next step, what to check if that fails, what to stop doing, and any question only you can answer.
 
-There are two advisors, with model and effort fixed in the agent files. `fable-advisor` (Fable at medium effort) is the one Claude uses first. `opus-advisor` (Opus at high effort) takes over when Fable's advice did not solve the problem or Fable is at its limit. If Opus is at its limit too, Sonnet at high effort is used.
+There are two advisors, with model and effort fixed in the agent files. `opus-advisor` (Opus at high effort) is the one Claude uses first. `fable-advisor` (Fable at medium effort) takes over when Opus's advice did not solve the problem or Opus is at its limit. If Fable is at its limit too, Sonnet at medium effort is used.
 
 ## Install
 
@@ -44,9 +44,9 @@ claude plugin update hfro@hfrotan-tools
 
 The advisor works on its own. To ask it directly:
 
-- `/hfro:fable` asks Fable at medium effort about whatever Claude is stuck on right now.
-- `/hfro:fable <problem or question>` asks about that.
-- `/hfro:opus` and `/hfro:opus <problem or question>` do the same on Opus at high effort.
+- `/hfro:opus` asks Opus at high effort about whatever Claude is stuck on right now.
+- `/hfro:opus <problem or question>` asks about that.
+- `/hfro:fable` and `/hfro:fable <problem or question>` do the same on Fable at medium effort.
 
 The answer ends with one line naming the advisor that actually ran, for example `Advice from Opus High`.
 

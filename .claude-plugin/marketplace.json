@@ -8,7 +8,7 @@
     {
       "name": "hfro",
       "source": "./plugins/hfro",
-      "description": "A read-only advisor that steps in when Claude is stuck: Fable at medium effort, escalating to Opus at high effort. Ask it directly with /hfro:fable or /hfro:opus."
+      "description": "A read-only advisor that steps in when Claude is stuck: Opus at high effort, escalating to Fable at medium effort. Ask it directly with /hfro:fable or /hfro:opus."
     }
   ],
   "renames": {
