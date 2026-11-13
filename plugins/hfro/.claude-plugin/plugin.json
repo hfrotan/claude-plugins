@@ -1,7 +1,7 @@
 {
   "name": "hfro",
-  "version": "4.0.0",
-  "description": "Two read-only reviewers that run only when you ask: /hfro:opus (Opus, high effort) or /hfro:fable (Fable, medium effort) reviews the latest result, or does a task with a plan review and a result review. Falls back to another model when the reviewer hits its limit. No hooks.",
+  "version": "6.0.1",
+  "description": "A read-only reviewer that runs only when you ask: /hfro:opus (Opus, high effort) or /hfro:fable (Fable, medium effort) reviews the latest result, or does a task and has the result reviewed before you see it. The reviewer finds and runs the work itself and backs every issue with evidence. Falls back to another model when the reviewer hits its limit. No hooks.",
   "author": {
     "name": "hfrotan"
   }
