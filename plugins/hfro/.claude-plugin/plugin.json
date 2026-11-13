@@ -1,36 +1,8 @@
 {
   "name": "hfro",
-  "version": "3.0.0",
-  "description": "Two read-only reviewers that run only when you ask: /hfro:opus (Opus, high effort) or /hfro:fable (Fable, medium effort) reviews the latest result, or does a task with a plan review and a result review. Falls back to another model when the reviewer hits its limit.",
+  "version": "4.0.0",
+  "description": "Two read-only reviewers that run only when you ask: /hfro:opus (Opus, high effort) or /hfro:fable (Fable, medium effort) reviews the latest result, or does a task with a plan review and a result review. Falls back to another model when the reviewer hits its limit. No hooks.",
   "author": {
     "name": "hfrotan"
-  },
-  "userConfig": {
-    "fallback_model": {
-      "type": "string",
-      "title": "Fallback model for the reviewers",
-      "description": "Model the advisor and plan-advisor use when Opus is at its usage or rate limit or unavailable: fable, opus, sonnet, haiku, or off (no fallback).",
-      "default": "sonnet",
-      "options": [
-        "fable",
-        "opus",
-        "sonnet",
-        "haiku",
-        "off"
-      ]
-    },
-    "fallback_effort": {
-      "type": "string",
-      "title": "Fallback effort",
-      "description": "Effort level for the fallback model: low, medium, high, xhigh or max.",
-      "default": "high",
-      "options": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ]
-    }
   }
 }
