@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # hfro hooks. Same logic as advisor-gate.js for machines without Node: keep them in step.
-# Modes: session-start (print the workflow), prompt (record the tree), foreground (run reviews
-# in the foreground), plan-gate (no edits before a plan review), review (name the reviewer,
-# record the reviewed tree), stop (block until the latest change is reviewed).
+# Reviews run only after /hfro:opus or /hfro:fable. Modes: session-start (print the workflow),
+# prompt (record the tree after a review command), foreground (run reviews in the foreground),
+# review (name the reviewer, record the reviewed tree), stop (block until the latest change is
+# reviewed, after a review command only).
 
 import hashlib
 import json
@@ -16,13 +17,11 @@ import time
 
 MAX_ROUNDS = 4
 MAX_IGNORED = 2
-MAX_DENIED = 2
 EDIT_TOOLS = {'Write', 'Edit', 'MultiEdit', 'NotebookEdit'}
 MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'off']
 EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 EFFORT_NAMES = {'low': 'Low', 'medium': 'Medium', 'high': 'High', 'xhigh': 'XHigh', 'max': 'Max'}
-SKIP_RE = re.compile(r'(^|[^a-z])no[\s-]?advisor\b', re.I)
-SHORT_RE = re.compile(r'^(?:y|yes|yep|yeah|ok|okay|sure|go|go ahead|do it|please do|yes please|proceed|continue|sounds good|lgtm)\b[\s.!]*$', re.I)
+CMD_RE = re.compile(r'(^|[^\w-])hfro:(opus|fable)\b', re.I)
 VERDICT_RE = re.compile(r'VERDICT\**\s*:\s*\**\s*(APPROVE|REVISE)\b', re.I)
 ASYNC_RE = re.compile(r'\bagent launched\b|running in the background', re.I)
 LIMIT_RE = re.compile(
@@ -31,7 +30,6 @@ LIMIT_RE = re.compile(
 PAUSED_RE = re.compile(r'^[\s*_>`]*Review paused\b', re.I)
 NOT_RUN_RE = re.compile(r'^[\s*_>`]*Review not run\b', re.I)
 SKIPPED_RE = re.compile(r'^[\s*_>`]*Review skipped\b', re.I)
-FINAL_RE = re.compile(r'^[\s*_>`]*(?:Plan review by .*·\s*)?Reviewed by .*:\s*(?:not )?approved\b|^[\s*_>`]*Review (?:not run|skipped)\b', re.I)
 FEEDBACK_RE = re.compile(r'^\s*(Stop hook feedback|\[[^\]\n]*hook\]:|Files changed but|Round \d+ of \d+: the advisor)', re.I)
 INJECTED_RE = re.compile(r'^\s*(<task-notification>|<local-command-stdout>|<local-command-caveat>|\[Request interrupted)')
 REMINDER_RE = re.compile(r'<system-reminder>[\s\S]*?</system-reminder>')
@@ -182,16 +180,10 @@ def mode_prompt(data):
     state = load_state(data)
     state['baseline'] = None  # cleared first, so a killed hook never leaves the previous prompt's tree
     state['reviews'] = {}
-    # A new task (the last one ended with a final review line) needs a new plan review; a short
-    # reply such as "yes", or an answer to a question asked mid-task, keeps the current one.
-    prompt = str(data.get('prompt') or '').strip()
-    if (state.get('ended') and not SHORT_RE.search(prompt)) or not isinstance(state.get('planned'), bool):
-        state['planned'] = False
-    state['ended'] = False
-    state['skip'] = bool(SKIP_RE.search(prompt))
-    state['denied'] = 0
     try:
         save_state(data, state)
+        if not CMD_RE.search(str(data.get('prompt') or '')):
+            allow()  # no review asked: skip the tree hash
         state['baseline'] = fingerprint(data)
         save_state(data, state)
     except OSError:
@@ -219,53 +211,20 @@ def mode_foreground(data):
     allow()
 
 
-# Deny an edit tool until a reviewer has run for this task. Fails open: no state, noadvisor,
-# scratch files, or after MAX_DENIED denials in one prompt.
-def mode_plan_gate(data):
-    if data.get('tool_name') not in EDIT_TOOLS:
-        allow()
-    state = load_state(data)
-    if state.get('planned') is not False or state.get('skip') is True:
-        allow()
-    ti = data.get('tool_input') if isinstance(data.get('tool_input'), dict) else {}
-    baseline = state.get('baseline')
-    if is_scratch({'input': ti}, split_fp(baseline)[0] if isinstance(baseline, str) else None):
-        allow()
-    try:
-        denied = int(state.get('denied') or 0) + 1
-    except (TypeError, ValueError):
-        denied = 1
-    state['denied'] = denied
-    try:
-        save_state(data, state)
-    except OSError:
-        allow()
-    if denied > MAX_DENIED:
-        allow()
-    sys.stdout.write(json.dumps({'hookSpecificOutput': {
-        'hookEventName': 'PreToolUse',
-        'permissionDecision': 'deny',
-        'permissionDecisionReason':
-            'Plan review first: call the plan-advisor (round 1) with your plan before changing files, then make this change.',
-    }}))
-    allow()
-
-
 def mode_review(data):
     ti = data.get('tool_input') if isinstance(data.get('tool_input'), dict) else {}
     is_advisor = named(ti.get('subagent_type'), 'advisor')
     if data.get('tool_name') != 'Agent' or not (is_advisor or named(ti.get('subagent_type'), 'plan-advisor')):
         allow()
-    state = load_state(data)
-    state['planned'] = True  # a plan review, or a result review the fixes will answer to
     if is_advisor:
+        state = load_state(data)
         if not isinstance(state.get('reviews'), dict):
             state['reviews'] = {}
         state['reviews'][str(data.get('tool_use_id') or 'last')] = fingerprint(data, watched_dir(data, state))
-    try:
-        save_state(data, state)
-    except OSError:
-        pass
+        try:
+            save_state(data, state)
+        except OSError:
+            pass
     res = data.get('tool_response') if isinstance(data.get('tool_response'), dict) else {}
     effort = str(ti.get('effort') or os.environ.get('CLAUDE_CODE_EFFORT_LEVEL') or 'high').lower()
     reviewer = '%s %s' % (model_name(res.get('resolvedModel') or ti.get('model') or 'opus'), EFFORT_NAMES.get(effort, effort))
@@ -337,14 +296,6 @@ def is_user_prompt(e):
 
 
 def mode_stop(data):
-    # Remember whether this turn ended the task, so the next prompt knows to ask for a new plan review.
-    if isinstance(data.get('last_assistant_message'), str):
-        st = load_state(data)
-        st['ended'] = bool(FINAL_RE.search(last_line(data['last_assistant_message'])))
-        try:
-            save_state(data, st)
-        except OSError:
-            pass
     transcript_path = data.get('transcript_path')
     if not transcript_path or not os.path.exists(transcript_path):
         allow()
@@ -362,7 +313,7 @@ def mode_stop(data):
         allow()
 
     last_user = next((i for i in range(len(entries) - 1, -1, -1) if is_user_prompt(entries[i])), -1)
-    if last_user < 0 or SKIP_RE.search(prompt_text(entries[last_user])):
+    if last_user < 0 or not CMD_RE.search(prompt_text(entries[last_user])):  # no review asked
         allow()
 
     state = load_state(data)
@@ -460,7 +411,7 @@ def mode_stop(data):
     if failed:
         r = results[failed['id']]
         note = 'The last advisor call gave no verdict ("%s"). ' % re.sub(r'\s+', ' ', r['text']).strip()[:160]
-        # Fable (topadvisor) falls back to the normal Opus High reviewer, then the fallback setting.
+        # Fable falls back to Opus High, then the fallback setting.
         def eff(c):
             return c['model'] or 'opus'
         tried = {eff(c) for c in calls if c['id'] in results and not results[c['id']]['async'] and verdict_of(c) is None}
@@ -521,7 +472,7 @@ def main():
     if mode == 'session-start':
         mode_session_start()
     data = read_input()
-    {'prompt': mode_prompt, 'foreground': mode_foreground, 'plan-gate': mode_plan_gate, 'review': mode_review}.get(mode, mode_stop)(data)
+    {'prompt': mode_prompt, 'foreground': mode_foreground, 'review': mode_review}.get(mode, mode_stop)(data)
 
 
 try:

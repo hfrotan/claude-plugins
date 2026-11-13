@@ -1,7 +1,7 @@
 {
   "name": "hfro",
-  "version": "2.3.0",
-  "description": "Two read-only reviewers on Opus at high effort: a plan-advisor that must review every plan before files change and an advisor that must approve every change before it reaches you, enforced by hooks. /hfro:topadvisor uses Fable at high effort. Falls back to another model when the reviewer hits its limit.",
+  "version": "3.0.0",
+  "description": "Two read-only reviewers that run only when you ask: /hfro:opus (Opus, high effort) or /hfro:fable (Fable, medium effort) reviews the latest result, or does a task with a plan review and a result review. Falls back to another model when the reviewer hits its limit.",
   "author": {
     "name": "hfrotan"
   },

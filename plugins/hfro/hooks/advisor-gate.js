@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // hfro hooks. advisor-gate.py is the same logic for machines without Node: keep them in step.
-// Modes: session-start (print the workflow), prompt (record the tree), foreground (run reviews
-// in the foreground), plan-gate (no edits before a plan review), review (name the reviewer,
-// record the reviewed tree), stop (block until the latest change is reviewed).
+// Reviews run only after /hfro:opus or /hfro:fable. Modes: session-start (print the workflow),
+// prompt (record the tree after a review command), foreground (run reviews in the foreground),
+// review (name the reviewer, record the reviewed tree), stop (block until the latest change is
+// reviewed, after a review command only).
 
 const fs = require('fs');
 const os = require('os');
@@ -12,20 +13,17 @@ const { execFileSync } = require('child_process');
 
 const MAX_ROUNDS = 4;
 const MAX_IGNORED = 2;
-const MAX_DENIED = 2;
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'off'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const EFFORT_NAMES = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max' };
-const SKIP_RE = /(^|[^a-z])no[\s-]?advisor\b/i;
-const SHORT_RE = /^(?:y|yes|yep|yeah|ok|okay|sure|go|go ahead|do it|please do|yes please|proceed|continue|sounds good|lgtm)\b[\s.!]*$/i;
+const CMD_RE = /(^|[^\w-])hfro:(opus|fable)\b/i;
 const VERDICT_RE = /VERDICT\**\s*:\s*\**\s*(APPROVE|REVISE)\b/i;
 const ASYNC_RE = /\bagent launched\b|running in the background/i;
 const LIMIT_RE = /hit your (session |weekly |usage )?limit|usage limit|rate[ _-]?limit|\b429\b|\b529\b|overloaded|terminated early due to an API error|API Error/i;
 const PAUSED_RE = /^[\s*_>`]*Review paused\b/i;
 const NOT_RUN_RE = /^[\s*_>`]*Review not run\b/i;
 const SKIPPED_RE = /^[\s*_>`]*Review skipped\b/i;
-const FINAL_RE = /^[\s*_>`]*(?:Plan review by .*·\s*)?Reviewed by .*:\s*(?:not )?approved\b|^[\s*_>`]*Review (?:not run|skipped)\b/i;
 const FEEDBACK_RE = /^\s*(Stop hook feedback|\[[^\]\n]*hook\]:|Files changed but|Round \d+ of \d+: the advisor)/i;
 const INJECTED_RE = /^\s*(<task-notification>|<local-command-stdout>|<local-command-caveat>|\[Request interrupted)/;
 const GIT_TIMEOUT_MS = 5000;
@@ -152,15 +150,9 @@ function modePrompt(input) {
   const state = loadState(input);
   state.baseline = null; // cleared first, so a killed hook never leaves the previous prompt's tree
   state.reviews = {};
-  // A new task (the last one ended with a final review line) needs a new plan review; a short
-  // reply such as "yes", or an answer to a question asked mid-task, keeps the current one.
-  const prompt = String(input.prompt || '').trim();
-  if ((state.ended && !SHORT_RE.test(prompt)) || typeof state.planned !== 'boolean') state.planned = false;
-  state.ended = false;
-  state.skip = SKIP_RE.test(prompt);
-  state.denied = 0;
   try {
     saveState(input, state);
+    if (!CMD_RE.test(String(input.prompt || ''))) allow(); // no review asked: skip the tree hash
     state.baseline = fingerprint(input);
     saveState(input, state);
   } catch {}
@@ -186,47 +178,18 @@ function modeForeground(input) {
   allow();
 }
 
-// Deny an edit tool until a reviewer has run for this task. Fails open: no state, noadvisor,
-// scratch files, or after MAX_DENIED denials in one prompt.
-function modePlanGate(input) {
-  if (!EDIT_TOOLS.has(input.tool_name)) allow();
-  const state = loadState(input);
-  if (state.planned !== false || state.skip === true) allow();
-  const ti = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
-  if (isScratch({ input: ti }, typeof state.baseline === 'string' ? splitFp(state.baseline)[0] : null)) allow();
-  state.denied = (Number(state.denied) || 0) + 1;
-  try {
-    saveState(input, state);
-  } catch {
-    allow();
-  }
-  if (state.denied > MAX_DENIED) allow();
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason:
-          'Plan review first: call the plan-advisor (round 1) with your plan before changing files, then make this change.',
-      },
-    })
-  );
-  allow();
-}
-
 function modeReview(input) {
   const ti = input.tool_input || {};
   const isAdvisor = named(ti.subagent_type, 'advisor');
   if (input.tool_name !== 'Agent' || !(isAdvisor || named(ti.subagent_type, 'plan-advisor'))) allow();
-  const state = loadState(input);
-  state.planned = true; // a plan review, or a result review the fixes will answer to
   if (isAdvisor) {
+    const state = loadState(input);
     state.reviews = state.reviews && typeof state.reviews === 'object' ? state.reviews : {};
     state.reviews[String(input.tool_use_id || 'last')] = fingerprint(input, watchedDir(input, state));
+    try {
+      saveState(input, state);
+    } catch {}
   }
-  try {
-    saveState(input, state);
-  } catch {}
   const res = input.tool_response && typeof input.tool_response === 'object' ? input.tool_response : {};
   const effort = String(ti.effort || process.env.CLAUDE_CODE_EFFORT_LEVEL || 'high').toLowerCase();
   const reviewer = `${modelName(res.resolvedModel || ti.model || 'opus')} ${EFFORT_NAMES[effort] || effort}`;
@@ -286,14 +249,6 @@ function isUserPrompt(e) {
 }
 
 function modeStop(input) {
-  // Remember whether this turn ended the task, so the next prompt knows to ask for a new plan review.
-  if (typeof input.last_assistant_message === 'string') {
-    const st = loadState(input);
-    st.ended = FINAL_RE.test(lastLine(input.last_assistant_message));
-    try {
-      saveState(input, st);
-    } catch {}
-  }
   const transcriptPath = input.transcript_path;
   if (!transcriptPath || !fs.existsSync(transcriptPath)) allow();
   let entries;
@@ -311,7 +266,7 @@ function modeStop(input) {
 
   let lastUser = -1;
   for (let i = entries.length - 1; i >= 0 && lastUser < 0; i--) if (isUserPrompt(entries[i])) lastUser = i;
-  if (lastUser < 0 || SKIP_RE.test(promptText(entries[lastUser]))) allow();
+  if (lastUser < 0 || !CMD_RE.test(promptText(entries[lastUser]))) allow(); // no review asked
 
   const state = loadState(input);
   const repoTop = typeof state.baseline === 'string' ? splitFp(state.baseline)[0] : null;
@@ -391,7 +346,7 @@ function modeStop(input) {
   if (failed) {
     const r = results[failed.id];
     note = `The last advisor call gave no verdict ("${r.text.replace(/\s+/g, ' ').trim().slice(0, 160)}"). `;
-    // Fable (topadvisor) falls back to the normal Opus High reviewer, then the fallback setting.
+    // Fable falls back to Opus High, then the fallback setting.
     const eff = (c) => c.model || 'opus';
     const tried = new Set(calls.filter((c) => results[c.id] && !results[c.id].async && verdictOf(c) === null).map(eff));
     const options = (eff(failed) === 'fable' ? [{ model: 'opus', effort: 'high' }, fb] : [fb]).filter((o) => o.model !== 'off' && !tried.has(o.model));
@@ -445,7 +400,6 @@ try {
   const input = readInput();
   if (mode === 'prompt') modePrompt(input);
   else if (mode === 'foreground') modeForeground(input);
-  else if (mode === 'plan-gate') modePlanGate(input);
   else if (mode === 'review') modeReview(input);
   else modeStop(input);
 } catch {
