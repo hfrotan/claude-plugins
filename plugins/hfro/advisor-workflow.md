@@ -11,19 +11,20 @@ Skip both for questions, explanations, reviews of existing work, chat and lookup
 - Use the Agent tool with `run_in_background: false`. A hook also asks for the foreground.
 - The user wants only the final answer. Until the last review approves (or the loop ends), write no result, summary or draft answer in any message, including between rounds.
 - If a review runs in the background anyway, do not start another one: end your turn with the running line alone, nothing else, and write the full answer when the verdict arrives.
-- Set `description` to "Plan review by <model> <effort>" or "Result review by <model> <effort>", for example "Result review by Fable 5.2 Medium". Use the model's full name and version.
-- Both run on Fable at medium effort by default.
-- After each review a hook tells you the model and effort that actually ran, for example "Fable 5.2 Medium". Use that name in the final line.
+- Both run on Opus at high effort: always pass `model: "opus"` and `effort: "high"`. After `/hfro:topadvisor`, pass `model: "fable"` and `effort: "high"` for that task instead.
+- Set `description` to "Plan review by <model> <effort>" or "Result review by <model> <effort>", for example "Result review by Opus 5.5 High". Use the model's full name and version.
+- After each review a hook tells you the model and effort that actually ran, for example "Opus 5.5 High". Use that name in the final line.
+- If a Fable review (topadvisor) returns no verdict because Fable is at its limit or unavailable, call it again with `model: "opus"` and `effort: "high"`.
 <!-- fallback:on -->
-- If a call returns no verdict because Fable is at its usage or rate limit, overloaded or unavailable, call it again with `model: "{{FALLBACK_MODEL}}"` and `effort: "{{FALLBACK_EFFORT}}"` (the user set this in the plugin settings) and keep that for the rest of the task. A failed call is not a round. If the fallback fails too, tell the user.
+- If an Opus review returns no verdict because Opus is at its usage or rate limit, overloaded or unavailable, call it again with `model: "{{FALLBACK_MODEL}}"` and `effort: "{{FALLBACK_EFFORT}}"` (the user set this in the plugin settings) and keep that for the rest of the task. A failed call is not a round. If no model is left, tell the user.
 <!-- /fallback:on -->
 <!-- fallback:off -->
-- If a call returns no verdict because Fable is at its limit or unavailable, do not retry with another model: tell the user.
+- If an Opus review returns no verdict because Opus is at its limit or unavailable, do not retry with another model: tell the user. A failed call is not a round.
 <!-- /fallback:off -->
 
 ## Plan review
 
-Call the plan-advisor before changing anything when the task needs a result review and the plan has more than about three steps, a real choice between approaches, an ambiguity that changes what you would build, or a hard-to-undo step (deleting data, a migration, sending or publishing). Also when the user asks.
+Call the plan-advisor before changing anything in every task that needs a result review, however small, and whenever the user asks. A hook blocks the edit tools until a reviewer has run for the task. A follow-up that keeps the same plan (such as "yes" or an answer to your question) needs no new plan review; call it again only if the answer changes the plan.
 
 Send: ORIGINAL REQUEST (word for word), PLAN, ACCEPTANCE CRITERIA (short, checkable), CONTEXT (file paths, facts, assumptions), ROUND (1 or 2), and on round 2 PREVIOUS ISSUES with "changed: how" or "disagree: reason".
 
@@ -58,4 +59,4 @@ End with exactly one of these as the last line (the hook reads only the last lin
 - `Review skipped: changes not made by this task`
 - nothing, when the reviews were skipped
 
-<reviewer> is the model and effort the hook reported, for example "Fable 5.2 Medium" or "Opus 5.5 High".
+<reviewer> is the model and effort the hook reported, for example "Opus 5.5 High" or "Fable 5.2 High".

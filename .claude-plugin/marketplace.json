@@ -8,7 +8,7 @@
     {
       "name": "hfro",
       "source": "./plugins/hfro",
-      "description": "Plan review before larger tasks and an enforced, detailed result review before every non-trivial answer, with an Opus fallback when Fable hits its limit."
+      "description": "A plan review before every change and an enforced, detailed result review before every answer, on Opus at high effort, with /hfro:topadvisor for Fable at high effort and a fallback when the reviewer hits its limit."
     }
   ],
   "renames": {
