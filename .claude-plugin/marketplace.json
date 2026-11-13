@@ -8,7 +8,7 @@
     {
       "name": "hfro",
       "source": "./plugins/hfro",
-      "description": "On-demand result reviews: /hfro:opus (Opus, high effort) and /hfro:fable (Fable, medium effort), with a fallback when the reviewer hits its limit."
+      "description": "A read-only advisor that steps in when Claude is stuck: Opus at high effort, escalating to Fable at medium effort. Ask it directly with /hfro:fable or /hfro:opus."
     }
   ],
   "renames": {
