@@ -1,18 +1,20 @@
 # hfro
 
-A Claude Code plugin with a read-only reviewer, the **advisor**, that runs only when you ask. Claude does the task, the advisor checks the result, Claude fixes what it found and asks again, for at most 4 rounds. Then you get the answer.
+A Claude Code plugin with a read-only **advisor**: a senior second opinion for when Claude is stuck. It never edits files. It finds the root cause itself and tells Claude the single best next move.
 
-The advisor does not rely on Claude's own account of the work. It finds all changes itself with git, runs the tests and the changed behaviour, checks every claim in the draft answer, and returns APPROVE or REVISE. Every issue comes with evidence and an exact fix. Anything it could not verify is passed on to you.
+Claude calls it on its own, without being asked, when:
 
-It comes in two strengths, fixed in the agent files: `/hfro:opus` always reviews on Opus at high effort and `/hfro:fable` on Fable at medium effort.
+- the same error or test failure survives 2 fix attempts
+- it is going in circles or undoing its own changes
+- it cannot explain why something fails
+- a command, build, install or tool keeps failing for reasons it does not understand
+- it has to choose between approaches and the choice is hard to reverse
+- it is about to do something risky to get unstuck (deleting data, force-pushing, disabling tests, broad rewrites)
+- you ask for advice or a second opinion
 
-Nothing runs automatically and the plugin has no hooks, so normal tasks cost no extra time or tokens. The review instructions load only when you use a command. You see only the final answer, after the review is done; if Claude Code runs a review in the background, you see one short line, `Review running: I'll show the result when it's done`, and then the result.
+It does not run for routine work that is going fine. The advisor does not trust Claude's theory: it reproduces the failure, checks the usual blind spots (wrong file, stale build, wrong version, a downstream error), and answers with a diagnosis, its confidence, the evidence, one concrete next step, what to check if that fails, what to stop doing, and any question only you can answer.
 
-If the reviewer is at its limit, Fable switches to Opus at high effort, and Opus switches to Sonnet at high effort. Each reviewed answer ends with one short line naming the reviewer that actually ran, for example:
-
-```
-Reviewed by Opus High: approved (round 2)
-```
+There are two advisors, with model and effort fixed in the agent files. `fable-advisor` (Fable at medium effort) is the one Claude uses first. `opus-advisor` (Opus at high effort) takes over when Fable's advice did not solve the problem or Fable is at its limit. If Opus is at its limit too, Sonnet at high effort is used.
 
 ## Install
 
@@ -40,12 +42,16 @@ claude plugin update hfro@hfrotan-tools
 
 ## Use
 
-- `/hfro:opus` reviews the latest result now on Opus at high effort.
-- `/hfro:opus <task>` does the task and has the result reviewed on Opus at high effort before you see it.
-- `/hfro:fable` and `/hfro:fable <task>` do the same on Fable at medium effort.
+The advisor works on its own. To ask it directly:
+
+- `/hfro:fable` asks Fable at medium effort about whatever Claude is stuck on right now.
+- `/hfro:fable <problem or question>` asks about that.
+- `/hfro:opus` and `/hfro:opus <problem or question>` do the same on Opus at high effort.
+
+The answer ends with one line naming the advisor that actually ran, for example `Advice from Opus High`.
 
 ## Notes
 
-- The review steps live in `plugins/hfro/commands/opus.md` and `fable.md`; keep the two in step.
-- The reviewer lives in `plugins/hfro/agents/`. `opus-advisor.md` and `fable-advisor.md` differ only in name, description, model and effort; keep the rest in step.
+- The command steps live in `plugins/hfro/commands/opus.md` and `fable.md`; keep the two in step.
+- The advisor lives in `plugins/hfro/agents/`. `opus-advisor.md` and `fable-advisor.md` differ only in name, description, model and effort; keep the rest in step.
 - Bump `version` in `plugins/hfro/.claude-plugin/plugin.json` on every change.
